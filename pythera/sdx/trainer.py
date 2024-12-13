@@ -24,6 +24,7 @@ from transformers import AutoTokenizer, PretrainedConfig
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,DDIMScheduler)
+from args import parse_args
 
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
@@ -44,6 +45,7 @@ from pipeline import AbstractPipeline
 check_min_version("0.29.0.dev0")
 
 logger = get_logger(__name__)
+
 
 
 class ModelTrainManager:
@@ -128,52 +130,22 @@ class ModelTrainManager:
 
         return self.vae, self.tokenizer,self.text_encoder,self.unet, self.noise_scheduler
 
-    
-def setup_accelerator(args):
-    """Setup Accelerator and initialize wandb tracker."""
-    accelerator_project_config = ProjectConfiguration(
-        project_dir=args.output_dir, logging_dir=args.logging_dir
-    )
-    accelerator = Accelerator(
-        gradient_accumulation_steps=args.gradient_accumulation_steps,
-        mixed_precision=args.mixed_precision,
-        log_with="wandb",
-        project_config=accelerator_project_config,
-    )
+class SimpleDataset(torch.utils.data.Dataset):
+    def __init__(self):
+        self.data = [
+            {"latent_target": torch.randn(4, 64, 64), "encoder_hidden_state": torch.randn(77, 768)}
+            for _ in range(10)
+        ]
 
-    # Initialize wandb tracker
-    accelerator.init_trackers(
-        project_name="train_cat_inpainting",
-        config={
-            "learning_rate": args.learning_rate,
-            "train_batch_size": args.train_batch_size,
-            "num_train_epochs": args.num_train_epochs,
-            "resolution": args.resolution,
-        },
-    )
-    return accelerator
+    def __len__(self):
+        return len(self.data)
 
-# def create_dataloader(args):
-    # dtype = get_dtype_training(args.mixed_precision)
-    # dataset = Deepfurniture_Dataset_V1(
-    #     args.path_to_save_data_embedding,
-    #     input_type="embedding",
-    #     dtype=dtype,
-    #     image_size=args.resolution
-    # )
-    # dataloader = DataLoader(
-    #     dataset,
-    #     batch_size=args.train_batch_size,
-    #     shuffle=True,
-    #     num_workers=8,
-    #     collate_fn=collate_fn,
-    # )
-    # return dataloader
+    def __getitem__(self, idx):
+        return self.data[idx]
 
 
 def main():
     args = parse_args()
-    accelerator = setup_accelerator(args)
     model_trainable = ModelTrainManager(args)
         
     vae, tokenizer, text_encoder, unet, noise_scheduler = model_trainable.run_load_model()
@@ -186,26 +158,34 @@ def main():
         model = args.mode
     )
 
-
-
         
     del vae
     del tokenizer
     del text_encoder
     
-   
- 
-    # train_dataloader = create_dataloader(args)
-    
+     
     wandb_logger = WandbLogger(
-        project="train cat inpainting",
+        project="train inpainting",
         log_model=False)
     lit_model = AbstractLightningPipe(
         pipeline= pipeline,
         args = args,
 
     )
+
     
+    #Embedding data
+    embedding_data = True
+    if embedding_data:
+
+        dataset = SimpleDataset()
+        dataloader = DataLoader(
+            dataset,
+            batch_size=1,
+            shuffle=True,
+            num_workers=8,
+        )
+        lit_model.preprrocess_data(dataloader= dataloader, weight_dtype= torch.bfloat16)
 
     # Define checkpoint callback
     checkpoint_callback = ModelCheckpoint(
@@ -234,6 +214,12 @@ def main():
         
     )
 
+    train_dataloader = DataLoader(
+            dataset,
+            batch_size=1,
+            shuffle=True,
+            num_workers=8,
+        )
     # Train the model
     trainer.fit(
         model=lit_model,
