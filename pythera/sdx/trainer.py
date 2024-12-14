@@ -1,5 +1,5 @@
 import os
-from .models.unext import UNet2DConditionModel
+from models.unext import UNet2DConditionModel
 from diffusers import AutoencoderKL
 import argparse
 import contextlib
@@ -10,6 +10,7 @@ import os
 import random
 import shutil
 from pathlib import Path
+
 
 import numpy as np
 import torch
@@ -43,10 +44,13 @@ from lightningpipe import AbstractLightningPipe
 from pipeline import AbstractPipeline
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.29.0.dev0")
-
+from utils import get_dtype_training
 logger = get_logger(__name__)
-
-
+# Setup logger
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 class ModelTrainManager:
     def __init__(self, args):
@@ -57,16 +61,18 @@ class ModelTrainManager:
         self.noise_scheduler = None
         self.tokenizer = None
         self.text_encoder = None
+        self.dtype = get_dtype_training(self.args.mixed_precision)
+
+        
 
     def init_unet(self):
         try:
             self.unet = UNet2DConditionModel.from_pretrained(
                 self.args.unet_model_name_or_path, revision=self.args.revision, variant=self.args.variant
-            )
-            logger.info("Successfully initialized UNet model")
+            ).to('cuda', dtype= self.dtype)
+            logger.info("\033[92mSuccessfully initialized UNet model\033[0m")
         except Exception as e:
-            logger.error(f"Failed to initialize UNet model: {e}")
-
+            logger.error(f"\033[91mFailed to initialize UNet model: {e}\033[0m")
 
     def init_vae(self):
         try:
@@ -75,10 +81,10 @@ class ModelTrainManager:
                 subfolder="vae",
                 revision=self.args.revision,
                 variant=self.args.variant,
-            )
-            logger.info("Successfully initialized VAE model")
+            ).to('cuda', dtype= self.dtype)
+            logger.info("\033[92mSuccessfully initialized VAE model\033[0m")
         except Exception as e:
-            logger.error(f"Failed to initialize VAE model: {e}")
+            logger.error(f"\033[91mFailed to initialize VAE model: {e}\033[0m")
 
     def init_tokenizer(self): 
         try:
@@ -86,18 +92,18 @@ class ModelTrainManager:
                 self.args.pretrained_model_name_or_path,
                 subfolder="tokenizer", revision=self.args.revision, use_fast=False
             )
-            logger.info("Successfully initialized tokenizer")
+            logger.info("\033[92mSuccessfully initialized tokenizer\033[0m")
         except Exception as e:
-            logger.error(f"Failed to initialize tokenizer: {e}")
+            logger.error(f"\033[91mFailed to initialize tokenizer: {e}\033[0m")
 
     def init_noise_scheduler(self):
         try:
             self.noise_scheduler = DDIMScheduler.from_pretrained(
-                self.args.pretrained_model_name_or_path, subfolder="scheduler", prediction_type = self.args.prediction_type
+                self.args.pretrained_model_name_or_path, subfolder="scheduler", prediction_type=self.args.prediction_type
             )
-            logger.info("Successfully initialized noise scheduler")
+            logger.info("\033[92mSuccessfully initialized noise scheduler\033[0m")
         except Exception as e:
-            logger.error(f"Failed to initialize noise scheduler: {e}")
+            logger.error(f"\033[91mFailed to initialize noise scheduler: {e}\033[0m")
 
     def init_text_encoder(self):
         try:
@@ -114,26 +120,50 @@ class ModelTrainManager:
                     self.args.pretrained_model_name_or_path,
                     subfolder="text_encoder",
                     revision=self.args.revision,
-                )
-                logger.info("Successfully initialized text encoder: CLIPTextModel")
+                ).to(device = 'cuda', dtype = self.dtype)
+                logger.info("\033[92mSuccessfully initialized text encoder: CLIPTextModel\033[0m")
             else:
                 raise ValueError(f"{model_class} is not supported.")
         except Exception as e:
-            logger.error(f"Failed to initialize text encoder: {e}")
-    
-    def run_load_model(self):
+            logger.error(f"\033[91mFailed to initialize text encoder: {e}\033[0m")
+
+    def run_load_embedding_model(self):
         self.init_vae()
         self.init_tokenizer()
         self.init_text_encoder()
+        # self.init_unet()
+        # self.init_noise_scheduler()
+
+        return self.vae, self.tokenizer, self.text_encoder 
+
+    def run_load_trainable_model(self):
         self.init_unet()
         self.init_noise_scheduler()
 
-        return self.vae, self.tokenizer,self.text_encoder,self.unet, self.noise_scheduler
+        return self.unet, self.noise_scheduler
 
-class SimpleDataset(torch.utils.data.Dataset):
+
+class SimpleDataset_Embedding(torch.utils.data.Dataset):
     def __init__(self):
         self.data = [
-            {"latent_target": torch.randn(4, 64, 64), "encoder_hidden_state": torch.randn(77, 768)}
+            {"latents_target": torch.randn(3, 512, 512).to(dtype = torch.bfloat16
+), "prompt": torch.randn(77, 768).to(dtype = torch.bfloat16
+)}
+            for _ in range(10)
+        ]
+
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+class SimpleDataset_Training(torch.utils.data.Dataset):
+    def __init__(self):
+        self.data = [
+            {"latent_target": torch.randn(4, 64, 64).to(dtype = torch.bfloat16
+), "encoder_hidden_states": torch.randn(77, 768).to(dtype = torch.bfloat16
+)}
             for _ in range(10)
         ]
 
@@ -145,40 +175,40 @@ class SimpleDataset(torch.utils.data.Dataset):
 
 
 def main():
+
+    accelerator = Accelerator()
+
     args = parse_args()
     model_trainable = ModelTrainManager(args)
-        
-    vae, tokenizer, text_encoder, unet, noise_scheduler = model_trainable.run_load_model()
-    pipeline = AbstractPipeline(
-        unet= unet,
-        vae= vae,
-        noise_scheduler= noise_scheduler,
-        text_encoder= text_encoder,
-        tokenizer= tokenizer,
-        model = args.mode
-    )
-
-        
-    del vae
-    del tokenizer
-    del text_encoder
+    # vae, tokenizer, text_encoder , unet, noise_scheduler = model_trainable.run_load_model()
     
-     
+        
     wandb_logger = WandbLogger(
         project="train inpainting",
         log_model=False)
-    lit_model = AbstractLightningPipe(
-        pipeline= pipeline,
-        args = args,
 
-    )
 
     
     #Embedding data
-    embedding_data = True
-    if embedding_data:
+    if args.save_embeddings_to_npz:
+        vae, tokenizer, text_encoder  = model_trainable.run_load_embedding_model()
 
-        dataset = SimpleDataset()
+        # print('this is text encoder:', text_encoder)
+        unet = None 
+        noise_scheduler = None
+
+
+        lit_model = AbstractLightningPipe(
+        unet= None,
+        vae= vae,
+        text_encoder= text_encoder,
+        tokenizer= tokenizer,
+        mode= args.mode,
+        noise_scheduler= None,
+        args = args,
+
+    )
+        dataset = SimpleDataset_Embedding()
         dataloader = DataLoader(
             dataset,
             batch_size=1,
@@ -186,7 +216,23 @@ def main():
             num_workers=8,
         )
         lit_model.preprrocess_data(dataloader= dataloader, weight_dtype= torch.bfloat16)
+        del vae
+        del tokenizer
+        del text_encoder
+        del lit_model
 
+    unet, noise_scheduler = model_trainable.run_load_trainable_model()
+
+    lit_model = AbstractLightningPipe(
+        unet= unet,
+        vae= None,
+        text_encoder= None,
+        tokenizer= None,
+        mode= args.mode,
+        noise_scheduler= noise_scheduler,
+        args = args,
+
+    )
     # Define checkpoint callback
     checkpoint_callback = ModelCheckpoint(
         monitor="train_loss",
@@ -201,6 +247,7 @@ def main():
      # Learning rate monitoring
     lr_monitor = LearningRateMonitor(logging_interval="step")
 
+    dataset = SimpleDataset_Training()
     # Trainer configuration
     trainer = Trainer(
         max_epochs=args.num_train_epochs,         

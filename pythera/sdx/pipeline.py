@@ -3,9 +3,12 @@ import torch
 from dataclasses import dataclass
 from typing import Optional, Union
 import torch
+import torch.nn as nn
+from lightning.pytorch import LightningModule
 
-class AbstractPipeline:
+class AbstractPipeline():
     def __init__(self, unet, vae, text_encoder, tokenizer, mode, noise_scheduler):
+        super().__init__() 
         self.unet = unet
         self.vae = vae
         self.text_encoder = text_encoder
@@ -16,7 +19,6 @@ class AbstractPipeline:
     def forward(self, **kwargs):
 
         if self.mode == 0:  # Trainable U-Net
-
             noisy_latents = kwargs.get("noisy_latents", None)
             time_steps = kwargs.get("time_steps", None)
             encoder_hidden_states = kwargs.get("encoder_hidden_states", None)
