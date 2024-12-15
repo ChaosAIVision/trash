@@ -63,12 +63,10 @@ class ModelTrainManager:
         self.text_encoder = None
         self.dtype = get_dtype_training(self.args.mixed_precision)
 
-        
-
     def init_unet(self):
         try:
             self.unet = UNet2DConditionModel.from_pretrained(
-                self.args.unet_model_name_or_path, revision=self.args.revision, variant=self.args.variant
+                self.args.pretrained_model_name_or_path,subfolder="unet", revision=self.args.revision, variant=self.args.variant
             ).to('cuda', dtype= self.dtype)
             logger.info("\033[92mSuccessfully initialized UNet model\033[0m")
         except Exception as e:
@@ -131,8 +129,6 @@ class ModelTrainManager:
         self.init_vae()
         self.init_tokenizer()
         self.init_text_encoder()
-        # self.init_unet()
-        # self.init_noise_scheduler()
 
         return self.vae, self.tokenizer, self.text_encoder 
 
@@ -144,12 +140,14 @@ class ModelTrainManager:
 
 
 class SimpleDataset_Embedding(torch.utils.data.Dataset):
-    def __init__(self):
+    
+    def __init__(self, num_samples=10):
         self.data = [
-            {"latents_target": torch.randn(3, 512, 512).to(dtype = torch.bfloat16
-), "prompt": torch.randn(77, 768).to(dtype = torch.bfloat16
-)}
-            for _ in range(10)
+            {
+                "latents_target": torch.randn(3, 512, 512, dtype=torch.bfloat16),
+                "prompt": torch.randn(77, 768, dtype=torch.bfloat16),
+            }
+            for _ in range(num_samples)
         ]
 
     def __len__(self):
@@ -161,9 +159,8 @@ class SimpleDataset_Embedding(torch.utils.data.Dataset):
 class SimpleDataset_Training(torch.utils.data.Dataset):
     def __init__(self):
         self.data = [
-            {"latent_target": torch.randn(4, 64, 64).to(dtype = torch.bfloat16
-), "encoder_hidden_states": torch.randn(77, 768).to(dtype = torch.bfloat16
-)}
+        {"latent_target": torch.randn(4, 64, 64).to(dtype = torch.bfloat16),
+         "encoder_hidden_states": torch.randn(77, 768).to(dtype = torch.bfloat16)}
             for _ in range(10)
         ]
 
@@ -174,29 +171,30 @@ class SimpleDataset_Training(torch.utils.data.Dataset):
         return self.data[idx]
 
 
+def collate_fn_embedding(examples):
+    latents_target = torch.stack([example["latent_target"] for example in examples]).to(memory_format=torch.contiguous_format)
+    encoder_hidden_states = torch.stack([example["encoder_hidden_states"] for example in examples]).to(memory_format=torch.contiguous_format)
+
+    return {
+        "latent_target": latents_target,
+        "encoder_hidden_states": encoder_hidden_states,
+    }
+
+
 def main():
 
     accelerator = Accelerator()
 
     args = parse_args()
     model_trainable = ModelTrainManager(args)
-    # vae, tokenizer, text_encoder , unet, noise_scheduler = model_trainable.run_load_model()
-    
-        
+            
     wandb_logger = WandbLogger(
         project="train inpainting",
         log_model=False)
 
-
-    
     #Embedding data
     if args.save_embeddings_to_npz:
         vae, tokenizer, text_encoder  = model_trainable.run_load_embedding_model()
-
-        # print('this is text encoder:', text_encoder)
-        unet = None 
-        noise_scheduler = None
-
 
         lit_model = AbstractLightningPipe(
         unet= None,
@@ -213,13 +211,15 @@ def main():
             dataset,
             batch_size=1,
             shuffle=True,
-            num_workers=8,
+            num_workers=4,
         )
         lit_model.preprrocess_data(dataloader= dataloader, weight_dtype= torch.bfloat16)
         del vae
         del tokenizer
         del text_encoder
         del lit_model
+        del dataloader
+        del dataset
 
     unet, noise_scheduler = model_trainable.run_load_trainable_model()
 
@@ -262,16 +262,17 @@ def main():
     )
 
     train_dataloader = DataLoader(
-            dataset,
-            batch_size=1,
-            shuffle=True,
-            num_workers=8,
-        )
+        dataset,
+        batch_size=2,
+        shuffle=True,
+        num_workers=4,
+        collate_fn=collate_fn_embedding,
+        pin_memory=True,
+    )
     # Train the model
     trainer.fit(
         model=lit_model,
         train_dataloaders=train_dataloader,
-    #      ckpt_path= r'/home/tiennv/trang/chaos/trash/output/checkpoints/model-epoch=994-train_loss=0.0421.ckpt'
     )
 
     # Save final checkpoint

@@ -14,16 +14,13 @@ class AbstractLightningPipe(AbstractPipeline, LightningModule):
         self.save_hyperparameters()
         self.args = args
 
-    def forward(self, noisy_latents, time_steps, encoder_hidden_states, **kwargs):
-        return self(noisy_latents, time_steps, encoder_hidden_states, **kwargs)
-
     def training_step(self, batch, batch_idx):
         # Prepare data
         latent_target = batch['latent_target']
         encoder_hidden_states = batch["encoder_hidden_states"]
 
         # Create timesteps
-        timesteps = self._forward_create_timesteps(latent_target)
+        timesteps = self._forward_create_timesteps(latent_target).to('cuda')
 
         # Add noise
         noisy_latents, noise = self._forward_add_noise(latent_target, timesteps)

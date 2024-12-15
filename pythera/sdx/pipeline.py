@@ -18,7 +18,7 @@ class AbstractPipeline():
 
     def forward(self, **kwargs):
 
-        if self.mode == 0:  # Trainable U-Net
+        if int(self.mode) == 0:  # Trainable U-Net
             noisy_latents = kwargs.get("noisy_latents", None)
             time_steps = kwargs.get("time_steps", None)
             encoder_hidden_states = kwargs.get("encoder_hidden_states", None)
@@ -28,9 +28,10 @@ class AbstractPipeline():
             raise ValueError(f"Unsupported mode: {self.mode}")
 
     def _forward_unet(self, noisy_latents, time_steps, encoder_hidden_states, **kwargs):
+        
         model_pred = self.unet(
-            noisy_latent_input=noisy_latents,
-            time_steps=time_steps,
+            sample=noisy_latents,
+            timestep=time_steps,
             encoder_hidden_states=encoder_hidden_states,
             return_dict=False,
         )[0]
