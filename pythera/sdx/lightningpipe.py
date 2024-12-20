@@ -8,11 +8,21 @@ import pandas as pd
 from tqdm import tqdm
 from .pipeline import  AbstractPipeline
 
-class AbstractLightningPipe(AbstractPipeline, LightningModule):
+class AbstractLightningPipe( LightningModule):
     def __init__(self, args, unet, vae, text_encoder, tokenizer, mode, noise_scheduler):
-        super(AbstractLightningPipe, self).__init__(unet= unet, vae= vae, text_encoder= text_encoder, tokenizer= tokenizer,mode= mode, noise_scheduler= noise_scheduler)
-        self.save_hyperparameters()
+        super().__init__()
+        self.unet = unet
+        self.vae = vae
+        self.text_encoder = text_encoder
+        self.tokenizer = tokenizer
+        self.noise_scheduler = noise_scheduler
+        self.mode = mode
         self.args = args
+        self.abstract_pipeline = AbstractPipeline()
+
+    def foward(self, noise_latents, time_steps, encoder_hidden_states):
+        model_pred = self.abstract_pipeline.forward_pipeline(noise_latents = noise_latents, time_steps = time_steps, encoder_hidden_states= encoder_hidden_states)
+        return model_pred
 
     def training_step(self, batch, batch_idx):
         # Prepare data
@@ -20,10 +30,10 @@ class AbstractLightningPipe(AbstractPipeline, LightningModule):
         encoder_hidden_states = batch["encoder_hidden_states"]
 
         # Create timesteps
-        timesteps = self._forward_create_timesteps(latent_target).to('cuda')
+        timesteps = self.abstract_pipeline._forward_create_timesteps(self.noise_scheduler, latent_target).to('cuda')
 
         # Add noise
-        noisy_latents, noise = self._forward_add_noise(latent_target, timesteps)
+        noisy_latents, noise = self.abstract_pipeline._forward_add_noise(self.noise_scheduler, latent_target, timesteps)
 
         # Forward pass through
         model_pred = self(

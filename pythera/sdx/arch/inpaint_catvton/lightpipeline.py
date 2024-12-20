@@ -8,14 +8,14 @@ from tqdm import tqdm
 from .pipeline import  InpaintCatVTonPipeline
 from ...lightningpipe import AbstractLightningPipe
 from ...utils import compute_dream_and_update_latents_for_inpaint, get_dtype_training
+from pipeline import InpaintCatVTonPipeline
 
-class CatVtonLightningPipe(InpaintCatVTonPipeline, AbstractLightningPipe):
+class CatVtonLightningPipe(AbstractLightningPipe):
     
     def __init__(self, args, unet, vae, text_encoder, tokenizer, mode, noise_scheduler):
         super().__init__(unet=unet, vae=vae, text_encoder= text_encoder, tokenizer= tokenizer, mode= mode, noise_scheduler= noise_scheduler,args= args)
-        self.save_hyperparameters()
-        self.args = args
-        
+        self.abstract_pipeline = InpaintCatVTonPipeline()
+
     def training_step(self, batch, batch_idx):
 
         # Define latent_concat dim
@@ -23,7 +23,7 @@ class CatVtonLightningPipe(InpaintCatVTonPipeline, AbstractLightningPipe):
         
         # Get data_embedding
         device= 'cuda'
-        dtype = get_dtype_training (self.args.mixed_precision)
+        dtype = get_dtype_training(self.args.mixed_precision)
         latents_target = batch["latents_target"].to(device, dtype =dtype )
         latent_masked = batch['latents_masked'].to(device, dtype = dtype)
         mask_pixel_values = batch['mask_pixel_values'].to(device, dtype = dtype)

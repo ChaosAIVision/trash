@@ -1,4 +1,3 @@
-from lightning.pytorch import LightningModule
 import torch
 import torch.nn.functional as F
 from diffusers.training_utils import compute_snr
@@ -11,16 +10,20 @@ from ...lightningpipe import AbstractLightningPipe
 from ...utils import compute_dream_and_update_latents_for_inpaint, get_dtype_training
 from transformers import AutoImageProcessor, BatchFeature
 from itertools import islice
+from pipeline import InpaintMobileVitPipeline
 
-class MobileVitLightningPipe(InpaintMobileVitPipeline, AbstractLightningPipe):
+class MobileVitLightningPipe(AbstractLightningPipe):
     
     def __init__(self, args, unet, vae, text_encoder, tokenizer, mode, noise_scheduler, mobilet_vit):
-        
         super().__init__(unet= unet, vae= vae, text_encoder= text_encoder, tokenizer= tokenizer, mode= mode, args= args, noise_scheduler= noise_scheduler, mobile_vit= mobilet_vit)
-        self.save_hyperparameters()
-        self.args = args
+        # self.save_hyperparameters()
+        # self.args = args
         self.mobilet_vit = mobilet_vit
+        self.abstract_pipeline = InpaintMobileVitPipeline()
     
+    def foward(self, noise_latents, time_steps, encoder_hidden_states):
+        return self.abstract_pipeline.forward_pipeline(noise_latents = noise_latents, time_steps = time_steps, encoder_hidden_states = encoder_hidden_states)
+
     def training_step(self, batch, batch_idx):
         
         # Prepare data
@@ -34,17 +37,17 @@ class MobileVitLightningPipe(InpaintMobileVitPipeline, AbstractLightningPipe):
         mask_latents = torch.nn.functional.interpolate(mask_pixel_values, size=( height_mask// 8, width_mask // 8))
         # Create timesteps
         angles= torch.tensor([1]).to(device ='cuda', dtype= dtype)
-        timesteps = self._forward_create_timesteps(latents_target).to(device = 'cuda')
+        timesteps = self.abstract_pipeline._forward_create_timesteps(latents_target).to(device = 'cuda')
         
          # Add noise
-        noisy_latents, noise = self._forward_add_noise(latents_target, timesteps)
+        noisy_latents, noise = self.abstract_pipeline._forward_add_noise(latents_target, timesteps)
         
         inpainting_latent_model_input = torch.cat([noisy_latents, mask_latents, latents_masked], dim=1)
         
         input_mobile_vit = BatchFeature(data={'pixel_values': fill_images.to(dtype = dtype)})
         self.mobile_vit.to(dtype)
         with torch.no_grad():
-            output_mobilevit = self._forward_mobile_vit(inputs= input_mobile_vit, time_steps= timesteps, angles= angles)
+            output_mobilevit = self.abstract_pipeline._forward_mobile_vit(inputs= input_mobile_vit, time_steps= timesteps, angles= angles)
 
        
 
