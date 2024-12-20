@@ -1,5 +1,5 @@
 import os
-from models.unext import UNet2DConditionModel
+from .models.unext import UNet2DConditionModel
 from diffusers import AutoencoderKL
 import argparse
 import contextlib
@@ -25,7 +25,7 @@ from transformers import AutoTokenizer, PretrainedConfig
 from diffusers import (
     AutoencoderKL,
     DDPMScheduler,DDIMScheduler)
-from args import parse_args
+from .args import parse_args
 
 from diffusers.optimization import get_scheduler
 from diffusers.utils import check_min_version, is_wandb_available
@@ -40,11 +40,11 @@ if is_wandb_available():
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
 from lightning.pytorch import Trainer
 from lightning.pytorch.loggers import WandbLogger
-from lightningpipe import AbstractLightningPipe
-from pipeline import AbstractPipeline
+from .lightningpipe import AbstractLightningPipe
+from .pipeline import AbstractPipeline
 # Will error if the minimal version of diffusers is not installed. Remove at your own risks.
 check_min_version("0.29.0.dev0")
-from utils import get_dtype_training
+from .utils import get_dtype_training
 logger = get_logger(__name__)
 # Setup logger
 logger = logging.getLogger(__name__)
@@ -213,7 +213,7 @@ def main():
             shuffle=True,
             num_workers=4,
         )
-        lit_model.preprrocess_data(dataloader= dataloader, weight_dtype= torch.bfloat16)
+        lit_model.preprocess_data(dataloader= dataloader, weight_dtype= torch.bfloat16)
         del vae
         del tokenizer
         del text_encoder
@@ -281,5 +281,5 @@ def main():
 
     print(f"Training complete")
 
-
-main()
+if __name__ == '__main__':
+    main()

@@ -213,8 +213,8 @@ class UNet2DConditionModelControlNext(UNet2DConditionModel):
             down_block_res_samples += res_samples
 
             if down_idx == 0 and conditional_controls is not None:
-                scale = conditional_controls['scale']
-                conditional_controls = conditional_controls['output']
+                scale = 1
+                conditional_controls = conditional_controls
                 conditional_controls=nn.functional.adaptive_avg_pool2d(conditional_controls, sample.shape[-2:])
                 conditional_controls = conditional_controls.to(sample)                
                 mean_latents, std_latents = torch.mean(sample, dim=(1, 2, 3), keepdim=True), torch.std(sample, dim=(1, 2, 3), keepdim=True)

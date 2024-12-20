@@ -1,0 +1,5 @@
+colorama
+transformers
+diffusers
+pandas
+python-opencv

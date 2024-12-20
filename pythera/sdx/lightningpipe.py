@@ -2,11 +2,11 @@ from lightning.pytorch import LightningModule
 import torch
 import torch.nn.functional as F
 from diffusers.training_utils import compute_snr
-import numpy as np
+import numpy as np # type: ignore
 import os
 import pandas as pd
 from tqdm import tqdm
-from pipeline import  AbstractPipeline
+from .pipeline import  AbstractPipeline
 
 class AbstractLightningPipe(AbstractPipeline, LightningModule):
     def __init__(self, args, unet, vae, text_encoder, tokenizer, mode, noise_scheduler):
@@ -53,7 +53,7 @@ class AbstractLightningPipe(AbstractPipeline, LightningModule):
         )
         return optimizer
     
-    def preprrocess_data(self, dataloader, weight_dtype):
+    def preprocess_data(self, dataloader, weight_dtype):
         npz_data = {} 
         metadata_records = [] 
         
