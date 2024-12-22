@@ -22,8 +22,9 @@ class AbstractLightningPipe( LightningModule):
         self.args = args
         self.abstract_pipeline = AbstractPipeline()
 
-    def foward(self, noise_latents, time_steps, encoder_hidden_states):
-        model_pred = self.abstract_pipeline.forward_pipeline(noise_latents = noise_latents, time_steps = time_steps, encoder_hidden_states= encoder_hidden_states)
+    def forward(self, noise_latents, time_steps,encoder_hidden_states):
+        model_pred = self.abstract_pipeline.forward_pipeline(unet = self.unet,noisy_latents = noise_latents, time_steps = time_steps, encoder_hidden_states= encoder_hidden_states)
+
         return model_pred
 
     def training_step(self, batch, batch_idx):
@@ -39,6 +40,7 @@ class AbstractLightningPipe( LightningModule):
 
         # Forward pass through
         model_pred = self(
+            unet = self.unet,
             noisy_latents=noisy_latents,
             time_steps=timesteps,
             encoder_hidden_states=encoder_hidden_states,
@@ -68,12 +70,13 @@ class AbstractLightningPipe( LightningModule):
             eps= self.args.adam_epsilon
 
         )
-        else:
-            optimizer = torch.optim.AdamW(
-                self.unet.parameters(),
-                lr=self.args.learning_rate,
-                weight_decay=self.args.adam_weight_decay
-        )
+        
+        # else:
+        #     optimizer = torch.optim.AdamW(
+        #         self.unet.parameters(),
+        #         lr=self.args.learning_rate,
+        #         weight_decay=self.args.adam_weight_decay
+        # )
         return optimizer
     
     def preprocess_data(self, dataloader, weight_dtype):

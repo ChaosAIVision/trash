@@ -5,16 +5,16 @@ import numpy as np
 import os
 import pandas as pd
 from tqdm import tqdm
-from .pipeline import  InpaintCatVTonPipeline
 from ...lightningpipe import AbstractLightningPipe
 from ...utils import compute_dream_and_update_latents_for_inpaint, get_dtype_training
-from pipeline import InpaintCatVTonPipeline
+from .pipeline import InpaintCatVTonPipeline
 
 class CatVtonLightningPipe(AbstractLightningPipe):
     
     def __init__(self, args, unet, vae, text_encoder, tokenizer, mode, noise_scheduler):
-        super().__init__(unet=unet, vae=vae, text_encoder= text_encoder, tokenizer= tokenizer, mode= mode, noise_scheduler= noise_scheduler,args= args)
+        super(CatVtonLightningPipe, self).__init__(unet=unet, vae=vae, text_encoder= text_encoder, tokenizer= tokenizer, mode= mode, noise_scheduler= noise_scheduler,args= args)
         self.abstract_pipeline = InpaintCatVTonPipeline()
+        
 
     def training_step(self, batch, batch_idx):
 
@@ -28,7 +28,6 @@ class CatVtonLightningPipe(AbstractLightningPipe):
         latent_masked = batch['latents_masked'].to(device, dtype = dtype)
         mask_pixel_values = batch['mask_pixel_values'].to(device, dtype = dtype)
         fill_pixel_values = batch['fill_images'].to(device, dtype = dtype)
-
         # Create timesteps
         bsz = latents_target.shape[0]
         timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,), device= device)
@@ -66,15 +65,15 @@ class CatVtonLightningPipe(AbstractLightningPipe):
             encoder_hidden_states=None,
             dream_detail_preservation=1.0,  # You can adjust this value
         )
-
         # Forward computation
-        
+        # model_pred = self.forward()
+        self.unet.to(device = device, dtype = dtype)
+
         model_pred = self(
-            noisy_latents= inpainting_latent_model_input.to(dtype= dtype),
+            noise_latents= inpainting_latent_model_input.to(dtype= dtype),
             time_steps= timesteps,
             encoder_hidden_states = None,
         ) 
-
 
         if self.noise_scheduler.config.prediction_type == "epsilon":
             target = noise

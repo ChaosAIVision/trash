@@ -107,7 +107,7 @@ def main():
         del dataset
         
     unet, noise_scheduler = model_trainable.run_load_trainable_model()
-    
+
     lit_model = CatVtonLightningPipe(
         unet= unet,
         vae= None,
@@ -145,7 +145,7 @@ def main():
             callbacks=[checkpoint_callback, lr_monitor],
             logger=wandb_logger,
             log_every_n_steps=1,
-            precision=16 if args.mixed_precision == "fp16" else 32,
+            precision='bf16-mixed',
             accumulate_grad_batches=args.gradient_accumulation_steps,
             
         )

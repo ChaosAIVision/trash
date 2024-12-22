@@ -39,6 +39,8 @@ def compute_dream_and_update_latents_for_inpaint(
     Returns:
         `tuple[torch.Tensor, torch.Tensor]`: Adjusted noisy_latents and target.
     """
+
+    print('haha')
     conditional_controls = kwang.get('conditional_controls', None)
 
     
@@ -70,4 +72,5 @@ def compute_dream_and_update_latents_for_inpaint(
         raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
     
     _noisy_latents = torch.cat([_noisy_latents, noisy_latents[:, 4:]], dim=1)
+    print('kaka')
     return _noisy_latents, _target

@@ -6,21 +6,18 @@ import torch.nn as nn
 
 class AbstractPipeline():
 
-    def forward_pipeline(self, **kwargs):
+    def forward_pipeline(self,unet,noisy_latents,time_steps,encoder_hidden_states, **kwargs):
+        # unet = kwargs.get("unet", None)
+        # noisy_latents = kwargs.get("noisy_latents")
+        # time_steps = kwargs.get("time_steps", None)
 
-        if int(self.mode) == 0:  # Trainable U-Net
-            unet = kwargs.get("unet", None)
-            noisy_latents = kwargs.get("noisy_latents", None)
-            time_steps = kwargs.get("time_steps", None)
-            encoder_hidden_states = kwargs.get("encoder_hidden_states", None)
-            model_pred = self._forward_unet(unet, noisy_latents=noisy_latents,time_steps = time_steps, encoder_hidden_states= encoder_hidden_states )
-            return model_pred
-        else:
-            raise ValueError(f"Unsupported mode: {self.mode}")
+        # encoder_hidden_states = kwargs.get("encoder_hidden_states", None)
+        model_pred = self._forward_unet(unet, noisy_latents=noisy_latents,time_steps = time_steps, encoder_hidden_states= encoder_hidden_states )
+        return model_pred
+  
 
     def _forward_unet(self,unet, noisy_latents, time_steps, encoder_hidden_states, **kwargs):
         
-
         model_pred = unet(
             sample=noisy_latents,
             timestep=time_steps,
