@@ -7,6 +7,8 @@ import os
 import pandas as pd
 from tqdm import tqdm
 from .pipeline import  AbstractPipeline
+import bitsandbytes as bnb  
+
 
 class AbstractLightningPipe( LightningModule):
     def __init__(self, args, unet, vae, text_encoder, tokenizer, mode, noise_scheduler):
@@ -56,10 +58,21 @@ class AbstractLightningPipe( LightningModule):
         return loss
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
+
+        if self.args.use_adam8bit == True:
+            optimizer= bnb.optim.Adam8bit(
             self.unet.parameters(),
-            lr=self.args.learning_rate,
-            weight_decay=self.args.adam_weight_decay
+            lr = self.args.learning_rate,
+            betas=(self.args.adam_beta1, self.args.adam_beta2),
+            weight_decay= self.args.adam_weight_decay,
+            eps= self.args.adam_epsilon
+
+        )
+        else:
+            optimizer = torch.optim.AdamW(
+                self.unet.parameters(),
+                lr=self.args.learning_rate,
+                weight_decay=self.args.adam_weight_decay
         )
         return optimizer
     

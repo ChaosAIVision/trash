@@ -16,6 +16,7 @@ CUDA_VISIBLE_DEVICES=1 python -m pythera.sdx.arch.inpaint_catvton.trainer \
   --input_type 'csv' \
   --resume_from_checkpoint 'latest' \
   --prediction_type epsilon \
+  --use_adam8bit True \
     # --save_embeddings_to_npz True \
 
 #  --unet_model_name_or_path '/home/tiennv/trang/chaos/controlnext/weight_pretrain/unet_inpainting' \

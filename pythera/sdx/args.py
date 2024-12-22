@@ -42,6 +42,13 @@ def parse_args(input_args=None):
 
     )
     
+
+    parser.add_argument(
+    "--use_adam8bit",
+    type= bool,
+    default= False,
+    help= 'using adam8bit to save memory')
+
     parser.add_argument(
         "--revision",
         type=str,
