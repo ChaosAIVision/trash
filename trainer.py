@@ -263,7 +263,7 @@ def main():
 
     train_dataloader = DataLoader(
         dataset,
-        batch_size=2,
+        batch_size=1,
         shuffle=True,
         num_workers=4,
         collate_fn=collate_fn_embedding,

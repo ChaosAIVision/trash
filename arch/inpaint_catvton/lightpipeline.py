@@ -7,15 +7,22 @@ import pandas as pd
 from tqdm import tqdm
 from ...lightningpipe import AbstractLightningPipe
 from ...utils import compute_dream_and_update_latents_for_inpaint, get_dtype_training
-from .pipeline import InpaintCatVTonPipeline
+from ...pipeline import AbstractPipeline
+from torch.utils.checkpoint import checkpoint
 
+
+# def print_vram_usage(tag=""):
+#     """Hàm in mức sử dụng VRAM hiện tại."""
+#     allocated = torch.cuda.memory_allocated() / 1024 ** 3  # Bộ nhớ đang sử dụng (GB)
+#     reserved = torch.cuda.memory_reserved() / 1024 ** 3    # Bộ nhớ đã cấp phát (GB)
+#     print(f"[{tag}] VRAM Allocated: {allocated:.2f} GB, Reserved: {reserved:.2f} GB")
 class CatVtonLightningPipe(AbstractLightningPipe):
     
     def __init__(self, args, unet, vae, text_encoder, tokenizer, mode, noise_scheduler):
         super(CatVtonLightningPipe, self).__init__(unet=unet, vae=vae, text_encoder= text_encoder, tokenizer= tokenizer, mode= mode, noise_scheduler= noise_scheduler,args= args)
-        self.abstract_pipeline = InpaintCatVTonPipeline()
+        self.abstract_pipeline = AbstractPipeline()
         
-
+    
     def training_step(self, batch, batch_idx):
 
         # Define latent_concat dim
@@ -24,17 +31,16 @@ class CatVtonLightningPipe(AbstractLightningPipe):
         # Get data_embedding
         device= 'cuda'
         dtype = get_dtype_training(self.args.mixed_precision)
-        latents_target = batch["latents_target"].to(device, dtype =dtype )
-        latent_masked = batch['latents_masked'].to(device, dtype = dtype)
-        mask_pixel_values = batch['mask_pixel_values'].to(device, dtype = dtype)
-        fill_pixel_values = batch['fill_images'].to(device, dtype = dtype)
+        latents_target = batch["latents_target"].to(dtype =dtype )
+        latent_masked = batch['latents_masked'].to(dtype = dtype)
+        mask_pixel_values = batch['mask_pixel_values'].to(dtype = dtype)
+        fill_pixel_values = batch['fill_images'].to(dtype = dtype)
         # Create timesteps
         bsz = latents_target.shape[0]
-        timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,), device= device)
-
+        timesteps = torch.randint(0, self.noise_scheduler.config.num_train_timesteps, (bsz,)).to(device = device)
         # Concatenate conditional
         masked_latent_concat = torch.cat([latent_masked, fill_pixel_values], dim=concat_dim)
-
+        # print("CHECK: ",masked_latent_concat.device)
         height_mask, width_mask = mask_pixel_values.shape[2], mask_pixel_values.shape[3]        
         mask_latent=  torch.nn.functional.interpolate(mask_pixel_values, size=( height_mask// 8, width_mask // 8))
         mask_latent_concat = torch.cat([mask_latent, torch.zeros_like(mask_latent)], dim=concat_dim)
@@ -50,10 +56,9 @@ class CatVtonLightningPipe(AbstractLightningPipe):
   
         inpainting_latent_model_input = torch.cat([noisy_latents_target, mask_latent_concat, masked_latent_concat], dim=1).to(dtype= dtype)
 
-
     # DREAM integration
+        # print_vram_usage('before using dreambooth')
 
-    
         self.unet.to(device = device , dtype = dtype)
         inpainting_latent_model_input, latents_target = compute_dream_and_update_latents_for_inpaint(
             unet=self.unet,
@@ -65,13 +70,11 @@ class CatVtonLightningPipe(AbstractLightningPipe):
             encoder_hidden_states=None,
             dream_detail_preservation=1.0,  # You can adjust this value
         )
-        # Forward computation
-        # model_pred = self.forward()
-        self.unet.to(device = device, dtype = dtype)
 
+        inpainting_latent_model_input.to(dtype= dtype)
         model_pred = self(
-            noise_latents= inpainting_latent_model_input.to(dtype= dtype),
-            time_steps= timesteps,
+            noisy_latents= inpainting_latent_model_input.to(dtype= dtype),
+            time_steps= timesteps.to('cuda'),
             encoder_hidden_states = None,
         ) 
 

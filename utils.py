@@ -39,11 +39,7 @@ def compute_dream_and_update_latents_for_inpaint(
     Returns:
         `tuple[torch.Tensor, torch.Tensor]`: Adjusted noisy_latents and target.
     """
-
-    print('haha')
     conditional_controls = kwang.get('conditional_controls', None)
-
-    
     alphas_cumprod = noise_scheduler.alphas_cumprod.to(timesteps.device)[timesteps, None, None, None]
     sqrt_one_minus_alphas_cumprod = (1.0 - alphas_cumprod) ** 0.5
 
@@ -54,10 +50,10 @@ def compute_dream_and_update_latents_for_inpaint(
     with torch.no_grad():
         if conditional_controls is not None:
             pred = unet(sample=noisy_latents, timestep = timesteps, encoder_hidden_states=  encoder_hidden_states,
-            conditional_controls = conditional_controls)
+            conditional_controls = conditional_controls).sample
             
-        pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
-
+        else:
+            pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
     noisy_latents_no_condition = noisy_latents[:, :4]
     _noisy_latents, _target = (None, None)
     if noise_scheduler.config.prediction_type == "epsilon":
@@ -72,5 +68,5 @@ def compute_dream_and_update_latents_for_inpaint(
         raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
     
     _noisy_latents = torch.cat([_noisy_latents, noisy_latents[:, 4:]], dim=1)
-    print('kaka')
+    # del unet
     return _noisy_latents, _target

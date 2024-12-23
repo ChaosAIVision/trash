@@ -141,5 +141,5 @@ def skip_encoder_hidden_state(unet,
             attn_procs[name] = cross_attn_cls(hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, **kwargs)
                                                     
     unet.set_attn_processor(attn_procs)
-    adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
-    return adapter_modules
+    # adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
+    # return adapter_modules

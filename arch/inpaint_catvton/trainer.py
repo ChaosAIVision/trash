@@ -53,9 +53,10 @@ class InpaintCatVtonManager(ModelTrainManager):
         
     def init_unet(self):
         try:
+            dtype = get_dtype_training(self.args.mixed_precision)
             self.unet = UNet2DConditionModel.from_pretrained(
                 self.args.pretrained_model_name_or_path, subfolder = 'unet', revision=self.args.revision, variant=self.args.variant
-            )
+            ).to(dtype = dtype)
             skip_encoder_hidden_state(self.unet,cross_attn_cls= SkipAttnProcessor )
             logger.info("Successfully initialized UNet model")
         except Exception as e:
@@ -108,6 +109,15 @@ def main():
         
     unet, noise_scheduler = model_trainable.run_load_trainable_model()
 
+
+    # NOTE train self attention
+    #  for name, param in unet.named_parameters():
+    #     if "attn1" in name:  
+    #         param.requires_grad = True  
+    #     else:
+    #         param.requires_grad = False 
+
+            
     lit_model = CatVtonLightningPipe(
         unet= unet,
         vae= None,
@@ -117,7 +127,7 @@ def main():
         noise_scheduler= noise_scheduler,
         args = args,   
     )
-    
+    del unet, noise_scheduler
     # Define checkpoint callback
     checkpoint_callback = ModelCheckpoint(
         monitor="train_loss",
@@ -145,7 +155,6 @@ def main():
             callbacks=[checkpoint_callback, lr_monitor],
             logger=wandb_logger,
             log_every_n_steps=1,
-            precision='bf16-mixed',
             accumulate_grad_batches=args.gradient_accumulation_steps,
             
         )
